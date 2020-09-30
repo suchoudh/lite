@@ -2,6 +2,7 @@ local core = require "core"
 local common = require "core.common"
 local config = require "core.config"
 local style = require "core.style"
+local keymap = require "core.keymap"
 local translate = require "core.doc.translate"
 local View = require "core.view"
 
@@ -191,21 +192,42 @@ function DocView:scroll_to_make_visible(line, col)
 end
 
 
+local function mouse_selection(doc, clicks, line1, col1, line2, col2)
+  local swap = line2 < line1 or line2 == line1 and col2 <= col1
+  if swap then
+    line1, col1, line2, col2 = line2, col2, line1, col1
+  end
+  if clicks == 2 then
+    line1, col1 = translate.start_of_word(doc, line1, col1)
+    line2, col2 = translate.end_of_word(doc, line2, col2)
+  elseif clicks == 3 then
+    if line2 == #doc.lines and doc.lines[#doc.lines] ~= "\n" then
+      doc:insert(math.huge, math.huge, "\n")
+    end
+    line1, col1, line2, col2 = line1, 1, line2 + 1, 1
+  end
+  if swap then
+    return line2, col2, line1, col1
+  end
+  return line1, col1, line2, col2
+end
+
+
 function DocView:on_mouse_pressed(button, x, y, clicks)
   local caught = DocView.super.on_mouse_pressed(self, button, x, y, clicks)
   if caught then
     return
   end
-  local line, col = self:resolve_screen_position(x, y)
-  if clicks == 2 then
-    local line1, col1 = translate.start_of_word(self.doc, line, col)
-    local line2, col2 = translate.end_of_word(self.doc, line, col)
-    self.doc:set_selection(line2, col2, line1, col1)
-  elseif clicks == 3 then
-    self.doc:set_selection(line + 1, 1, line, 1)
+  if keymap.modkeys["shift"] then
+    if clicks == 1 then
+      local line1, col1 = select(3, self.doc:get_selection())
+      local line2, col2 = self:resolve_screen_position(x, y)
+      self.doc:set_selection(line2, col2, line1, col1)
+    end
   else
-    self.doc:set_selection(line, col)
-    self.mouse_selecting = true
+    local line, col = self:resolve_screen_position(x, y)
+    self.doc:set_selection(mouse_selection(self.doc, clicks, line, col, line, col))
+    self.mouse_selecting = { line, col, clicks = clicks }
   end
   self.blink_timer = 0
 end
@@ -221,16 +243,17 @@ function DocView:on_mouse_moved(x, y, ...)
   end
 
   if self.mouse_selecting then
-    local _, _, line2, col2 = self.doc:get_selection()
-    local line1, col1 = self:resolve_screen_position(x, y)
-    self.doc:set_selection(line1, col1, line2, col2)
+    local l1, c1 = self:resolve_screen_position(x, y)
+    local l2, c2 = table.unpack(self.mouse_selecting)
+    local clicks = self.mouse_selecting.clicks
+    self.doc:set_selection(mouse_selection(self.doc, clicks, l1, c1, l2, c2))
   end
 end
 
 
 function DocView:on_mouse_released(button)
   DocView.super.on_mouse_released(self, button)
-  self.mouse_selecting = false
+  self.mouse_selecting = nil
 end
 
 
@@ -322,7 +345,7 @@ function DocView:draw_line_gutter(idx, x, y)
     color = style.line_number2
   end
   local yoffset = self:get_line_text_y_offset()
-  x = x + self.scroll.x
+  x = x + style.padding.x
   renderer.draw_text(self:get_font(), idx, x, y + yoffset, color)
 end
 
@@ -337,7 +360,7 @@ function DocView:draw()
   local lh = self:get_line_height()
 
   local _, y = self:get_line_screen_position(minline)
-  local x = self:get_content_offset() + style.padding.x
+  local x = self.position.x
   for i = minline, maxline do
     self:draw_line_gutter(i, x, y)
     y = y + lh

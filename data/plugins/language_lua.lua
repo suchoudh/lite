@@ -2,16 +2,18 @@ local syntax = require "core.syntax"
 
 syntax.add {
   files = "%.lua$",
+  headers = "^#!.*[ /]lua",
   comment = "--",
   patterns = {
     { pattern = { '"', '"', '\\' },       type = "string"   },
     { pattern = { "'", "'", '\\' },       type = "string"   },
     { pattern = { "%[%[", "%]%]" },       type = "string"   },
-    { pattern = { "--%[%[", "%]%]"},      type = "comment"  },
+    { pattern = { "%-%-%[%[", "%]%]"},    type = "comment"  },
     { pattern = "%-%-.-\n",               type = "comment"  },
     { pattern = "-?0x%x+",                type = "number"   },
     { pattern = "-?%d+[%d%.eE]*",         type = "number"   },
     { pattern = "-?%.?%d+",               type = "number"   },
+    { pattern = "<%a+>",                  type = "keyword2" },
     { pattern = "%.%.%.?",                type = "operator" },
     { pattern = "[<>~=]=",                type = "operator" },
     { pattern = "[%+%-=/%*%^%%#<>]",      type = "operator" },
